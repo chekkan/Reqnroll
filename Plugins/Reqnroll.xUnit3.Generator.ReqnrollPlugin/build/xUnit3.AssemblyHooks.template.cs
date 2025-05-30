@@ -4,30 +4,68 @@
 using System.CodeDom.Compiler;
 using global::System.Runtime.CompilerServices;
 using System.Threading.Tasks;
+using global::Reqnroll.BoDi; // Required for IObjectContainer, GlobalObjectContainer
+using global::Reqnroll.Infrastructure; // Required for ITestExecutionEngine, ITestObjectResolver, ITestRunnerManager
+using global::System.Reflection; // Required for Assembly
 
-[assembly: global::Xunit.TestFramework(typeof(Reqnroll.xUnit3.ReqnrollPlugin.XUnit3TestFrameworkWithAssemblyFixture))]
-[assembly: global::Xunit.AssemblyFixture(typeof(global::PROJECT_ROOT_NAMESPACE_XUnit3AssemblyFixture))]
+// This attribute ensures our custom framework is used.
+[assembly: global::Xunit.TestFramework("Reqnroll.xUnit3.ReqnrollPlugin.XUnit3TestFrameworkWithAssemblyFixture", "Reqnroll.xUnit3.ReqnrollPlugin")]
+// This attribute registers the assembly fixture below.
+[assembly: global::Xunit.AssemblyFixture(typeof(global::PROJECT_ROOT_NAMESPACE.ReqnrollXUnit3AssemblyFixture))]
 
-[GeneratedCode("Reqnroll", "REQNROLL_VERSION")]
-public class PROJECT_ROOT_NAMESPACE_XUnit3AssemblyFixture : global::Xunit.IAsyncLifetime
+namespace PROJECT_ROOT_NAMESPACE
 {
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    public async ValueTask InitializeAsync()
+    [GeneratedCode("Reqnroll", "REQNROLL_VERSION")] // REQNROLL_VERSION will be replaced by the build process
+    public class ReqnrollXUnit3AssemblyFixture : global::Xunit.IAsyncLifetime
     {
-        var currentAssembly = typeof(PROJECT_ROOT_NAMESPACE_XUnit3AssemblyFixture).Assembly;
-        await global::Reqnroll.TestRunnerManager.OnTestRunStartAsync(currentAssembly);
+        private readonly IObjectContainer _testThreadContainer;
+        private readonly ITestExecutionEngine _executionEngine;
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public ReqnrollXUnit3AssemblyFixture()
+        {
+            var globalContainer = global::Reqnroll.BoDi.GlobalObjectContainer.Instance;
+            
+            // Ensure TestRunnerManager is initialized with the current assembly
+            var testRunnerManager = globalContainer.Resolve<ITestRunnerManager>();
+            var currentAssembly = typeof(ReqnrollXUnit3AssemblyFixture).Assembly; // Or Assembly.GetExecutingAssembly() might also work
+            
+            // Initialize only if not already set or is different.
+            // This check helps prevent re-initialization if multiple fixtures or mechanisms might call it.
+            if (testRunnerManager.TestAssembly == null || testRunnerManager.TestAssembly != currentAssembly)
+            {
+                testRunnerManager.Initialize(currentAssembly);
+            }
+
+            // Now that TestRunnerManager is initialized for this assembly, resolve other dependencies
+            var testObjectResolver = globalContainer.Resolve<ITestObjectResolver>();
+            _testThreadContainer = testObjectResolver.ResolveTestThreadContainer(globalContainer);
+            _executionEngine = _testThreadContainer.Resolve<ITestExecutionEngine>();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async ValueTask InitializeAsync()
+        {
+            if (_executionEngine != null)
+            {
+                await _executionEngine.OnTestRunStartAsync();
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async ValueTask DisposeAsync()
+        {
+            if (_executionEngine != null)
+            {
+                await _executionEngine.OnTestRunEndAsync();
+            }
+            _testThreadContainer?.Dispose();
+        }
     }
 
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    public async ValueTask DisposeAsync()
+    [global::Xunit.CollectionDefinition("ReqnrollNonParallelizableFeatures", DisableParallelization = true)]
+    public class ReqnrollNonParallelizableFeaturesCollectionDefinition
     {
-        var currentAssembly = typeof(PROJECT_ROOT_NAMESPACE_XUnit3AssemblyFixture).Assembly;
-        await global::Reqnroll.TestRunnerManager.OnTestRunEndAsync(currentAssembly);
     }
-}
-
-[global::Xunit.CollectionDefinition("ReqnrollNonParallelizableFeatures", DisableParallelization = true)]
-public class PROJECT_ROOT_NAMESPACE_ReqnrollNonParallelizableFeaturesCollectionDefinition
-{
 }
 #pragma warning restore
